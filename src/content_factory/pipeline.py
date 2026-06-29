@@ -8,6 +8,7 @@ from .db import SQLiteStore
 from .queue import QueueService
 from .renderer import Renderer
 from .safety import SafetyGate
+from .video_renderer import VideoRenderer
 
 
 class ContentPipeline:
@@ -15,6 +16,7 @@ class ContentPipeline:
         self.store = SQLiteStore(db_path)
         self.queue = QueueService(db_path)
         self.renderer = Renderer(output_dir)
+        self.video_renderer = VideoRenderer(output_dir)
         self.safety = SafetyGate()
         self.artifacts = ArtifactStore(output_dir)
 
@@ -30,10 +32,11 @@ class ContentPipeline:
             self.queue.update_status(self.queue.list_pending()[0]["id"] if self.queue.list_pending() else 0, "blocked")
             return {"topic_id": topic_id, "status": safety_result["status"], "reason": safety_result["reason"]}
 
-        output_path = self.renderer.render_reel(payload, output_path)
-        self.artifacts.save_result(topic_id, payload, output_path)
+        image_path = self.renderer.render_reel(payload, output_path)
+        video_path = self.video_renderer.render_video(payload, Path(str(image_path)).with_suffix('.mp4'))
+        self.artifacts.save_result(topic_id, payload, video_path)
         self.queue.update_status(self.queue.list_pending()[0]["id"] if self.queue.list_pending() else 0, "rendered")
-        return {"topic_id": topic_id, "status": "rendered", "output_path": str(output_path)}
+        return {"topic_id": topic_id, "status": "rendered", "output_path": str(video_path), "image_path": str(image_path)}
 
     def close(self) -> None:
         self.store.close()
