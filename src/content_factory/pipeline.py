@@ -6,6 +6,7 @@ from typing import Any
 from .artifacts import ArtifactStore
 from .db import SQLiteStore
 from .queue import QueueService
+from .publisher import Publisher
 from .renderer import Renderer
 from .safety import SafetyGate
 from .scheduler import Scheduler
@@ -21,6 +22,7 @@ class ContentPipeline:
         self.safety = SafetyGate()
         self.artifacts = ArtifactStore(output_dir)
         self.scheduler = Scheduler(output_dir)
+        self.publisher = Publisher(output_dir)
 
     def create_topic(self, title: str, audience: str, objective: str, template: str) -> int:
         return self.store.create_topic(title, audience, objective, template)
@@ -38,8 +40,15 @@ class ContentPipeline:
         image_path = self.renderer.render_reel(payload, output_path)
         video_path = self.video_renderer.render_video(payload, Path(str(image_path)).with_suffix('.mp4'))
         self.artifacts.save_result(topic_id, payload, video_path)
+        publish_result = self.publisher.publish(video_path, payload.get("title", ""))
         self.queue.update_status(self.queue.list_pending()[0]["id"] if self.queue.list_pending() else 0, "rendered")
-        return {"topic_id": topic_id, "status": "rendered", "output_path": str(video_path), "image_path": str(image_path)}
+        return {
+            "topic_id": topic_id,
+            "status": "rendered",
+            "output_path": str(video_path),
+            "image_path": str(image_path),
+            "publish": publish_result,
+        }
 
     def close(self) -> None:
         self.store.close()
