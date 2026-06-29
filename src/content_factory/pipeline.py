@@ -8,6 +8,7 @@ from .db import SQLiteStore
 from .queue import QueueService
 from .renderer import Renderer
 from .safety import SafetyGate
+from .scheduler import Scheduler
 from .video_renderer import VideoRenderer
 
 
@@ -19,6 +20,7 @@ class ContentPipeline:
         self.video_renderer = VideoRenderer(output_dir)
         self.safety = SafetyGate()
         self.artifacts = ArtifactStore(output_dir)
+        self.scheduler = Scheduler(output_dir)
 
     def create_topic(self, title: str, audience: str, objective: str, template: str) -> int:
         return self.store.create_topic(title, audience, objective, template)
@@ -27,6 +29,7 @@ class ContentPipeline:
         return self.queue.enqueue_topic(topic_id)
 
     def process_topic(self, topic_id: int, payload: dict[str, Any], output_path: str | Path | None = None) -> dict[str, Any]:
+        self.scheduler.run_once(f"topic_{topic_id}")
         safety_result = self.safety.evaluate(payload)
         if safety_result["status"] != "SAFE":
             self.queue.update_status(self.queue.list_pending()[0]["id"] if self.queue.list_pending() else 0, "blocked")
